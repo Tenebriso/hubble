@@ -7,6 +7,7 @@ Functions for manipulating or otherwise processing strings
 import logging
 import unicodedata
 
+from hubblestack.utils.decorators.jinja import jinja_filter
 log = logging.getLogger(__name__)
 
 def to_unicode(string_to_convert, encoding=None, errors='strict', normalize=False):

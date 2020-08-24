@@ -143,3 +143,15 @@ def to_num(text):
             return float(text)
         except ValueError:
             return text
+
+
+@jinja_filter("is_hex")
+def is_hex(value):
+    """
+    Returns True if value is a hexadecimal string, otherwise returns False
+    """
+    try:
+        int(value, 16)
+        return True
+    except (TypeError, ValueError):
+        return False

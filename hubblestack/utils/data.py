@@ -4,6 +4,8 @@ Functions for manipulating, inspecting, or otherwise working with data types
 and data structures.
 '''
 
+import copy
+import fnmatch
 import logging
 
 try:
@@ -12,6 +14,8 @@ except ImportError:
     from collections import Mapping, MutableMapping, Sequence
 
 import hubblestack.utils.stringutils
+import hubblestack.utils.dictupdate
+from hubblestack.utils.exceptions import HubbleException
 
 import salt.utils.yaml
 
@@ -457,6 +461,7 @@ def traverse_dict_and_list(data, key, default=None, delimiter=':'):
                 return default
     return ptr
 
+
 def stringify(data):
     '''
     Given an iterable, returns its items as a list, with any non-string items
@@ -471,3 +476,79 @@ def stringify(data):
         
         ret.append(item)
     return ret
+
+
+def is_true(value=None):
+    """
+    Returns a boolean value representing the "truth" of the value passed. The
+    rules for what is a "True" value are:
+        1. Integer/float values greater than 0
+        2. The string values "True" and "true"
+        3. Any object for which bool(obj) returns True
+    """
+    # First, try int/float conversion
+    try:
+        value = int(value)
+    except (ValueError, TypeError):
+        pass
+    try:
+        value = float(value)
+    except (ValueError, TypeError):
+        pass
+
+    # Now check for truthiness
+    if isinstance(value, (int, float)):
+        return value > 0
+    if isinstance(value, str):
+        return str(value).lower() == "true"
+    return bool(value)
+
+
+def filter_by(lookup_dict, lookup, traverse, merge=None, default="default", base=None):
+    """
+    Common code to filter data structures like grains and pillar
+    """
+    ret = None
+    # Default value would be an empty list if lookup not found
+    val = traverse_dict_and_list(traverse, lookup, [])
+
+    # Iterate over the list of values to match against patterns in the
+    # lookup_dict keys
+    for each in val if isinstance(val, list) else [val]:
+        for key in lookup_dict:
+            test_key = key if isinstance(key, str) else str(key)
+            test_each = (
+                each if isinstance(each, str) else str(each)
+            )
+            if fnmatch.fnmatchcase(test_each, test_key):
+                ret = lookup_dict[key]
+                break
+        if ret is not None:
+            break
+
+    if ret is None:
+        ret = lookup_dict.get(default, None)
+
+    if base and base in lookup_dict:
+        base_values = lookup_dict[base]
+        if ret is None:
+            ret = base_values
+
+        elif isinstance(base_values, Mapping):
+            if not isinstance(ret, Mapping):
+                raise HubbleException(
+                    "filter_by default and look-up values must both be " "dictionaries."
+                )
+            ret = hubblestack.utils.dictupdate.update(copy.deepcopy(base_values), ret)
+
+    if merge:
+        if not isinstance(merge, Mapping):
+            raise HubbleException("filter_by merge argument must be a dictionary.")
+
+        if ret is None:
+            ret = merge
+        else:
+            hubblestack.utils.dictupdate.update(ret, copy.deepcopy(merge))
+
+    return ret
+
